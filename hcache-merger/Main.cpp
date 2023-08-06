@@ -15,7 +15,7 @@
 
 #include "json.hpp"
 
-const std::string target_dir = "/home/ubuntu/htext-miner/cache";
+const std::string target_dir = "G:\\Dev2\\violet-message-search\\cache-raw";
 
 int main(int argc, char *argv[]) {
   if (argc == 1) {
@@ -42,11 +42,13 @@ int main(int argc, char *argv[]) {
     i >> j;
 
     for (const auto &item : j.items())
-      result[(count_process - 1) % count_of_split_file]->push_back(item.value());
+      result[(count_process - 1) % count_of_split_file]->push_back(
+          item.value());
   }
 
   for (int i = 0; i < count_of_split_file; i++) {
-    std::ofstream o(std::string("merged-") + std::to_string(i) + std::string(".json"));
+    std::ofstream o(std::string("merged-") + std::to_string(i) +
+                    std::string(".json"));
     o << *result[i] << std::endl;
   }
 }
