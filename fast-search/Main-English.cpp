@@ -21,7 +21,6 @@
 #include <sstream>
 #include <string>
 
-#include "Displant.h"
 #include "httplib.h"
 #include "rapidfuzz/fuzz.hpp"
 #include "rapidfuzz/utils.hpp"
@@ -81,12 +80,11 @@ void load_json() {
     auto page = x["Page"].get_double();
     auto msg = std::string_view(x["Message"]);
     auto score = x["Score"].get_double();
-
-    std::vector<double> rects(4);
-    rects[0] = (x["Rectangle"].at(0).get_double());
-    rects[1] = (x["Rectangle"].at(1).get_double());
-    rects[2] = (x["Rectangle"].at(2).get_double());
-    rects[3] = (x["Rectangle"].at(3).get_double());
+    std::vector<double> rects;
+    rects.push_back(x["Rectangle"].at(0).get_double());
+    rects.push_back(x["Rectangle"].at(1).get_double());
+    rects.push_back(x["Rectangle"].at(2).get_double());
+    rects.push_back(x["Rectangle"].at(3).get_double());
 
     m_infos.push_back(MergedInfo::create(
         (int)id.value(), page.value(), std::string(msg), score.value(), rects));
@@ -104,34 +102,6 @@ const std::string currentDateTime() {
   strftime(buf, sizeof(buf), "%Y-%m-%d.%X", &tstruct);
 
   return buf;
-}
-
-// std::string kor2Eng(const char* target) {
-//    //
-//    //  HangulConverter가 wchar_t 기반으로 구현되어 있어서
-//    //  utf-8 => unicode 해줘야함
-//    //
-//    wchar_t unicode[1024];
-//    std::mbstowcs(unicode, target, 1024);
-//    char kor2engtypo[1024 * 3];
-//    Utility::HangulConverter::total_disassembly(unicode, kor2engtypo);
-//    return std::string(kor2engtypo);
-//}
-
-std::wstring s2ws(const std::string &str) {
-  int size_needed =
-      MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
-  std::wstring wstrTo(size_needed, 0);
-  MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0],
-                      size_needed);
-  return wstrTo;
-}
-
-std::string kor2Eng(const char *target) {
-  auto search = s2ws(std::string(target));
-  char kor2engtypo[1024 * 3];
-  Utility::HangulConverter::total_disassembly(search.c_str(), kor2engtypo);
-  return std::string(kor2engtypo);
 }
 
 std::string
@@ -176,17 +146,16 @@ void route_internal(const httplib::Request &req, httplib::Response &res,
             << " | " << std::endl;
 
   auto search = std::string(&*query.first);
-  auto target = kor2Eng(&*query.first);
 
-  if (use_cache && cache.find(target) != cache.end()) {
+  if (use_cache && cache.find(search) != cache.end()) {
     lock.lock();
     cache_hit.find(search)->second = cache_hit.find(search)->second + 1;
     lock.unlock();
-    res.set_content(cache.find(target)->second, "text/json");
+    res.set_content(cache.find(search)->second, "text/json");
     return;
   }
 
-  std::vector<std::pair<MergedInfo *, double>> r = extractor(target, m_infos);
+  std::vector<std::pair<MergedInfo *, double>> r = extractor(search, m_infos);
 
   std::sort(r.begin(), r.end(), [](auto first, auto second) -> bool {
     return first.second > second.second;
@@ -198,8 +167,8 @@ void route_internal(const httplib::Request &req, httplib::Response &res,
   std::string json = result2Json(r, count);
 
   lock.lock();
-  if (use_cache && cache.find(target) == cache.end()) {
-    cache.insert({target, json});
+  if (use_cache && cache.find(search) == cache.end()) {
+    cache.insert({search, json});
     cache_hit.insert({search, 0});
   }
   lock.unlock();
@@ -225,7 +194,6 @@ void route_winternal(const httplib::Request &req, httplib::Response &res,
             << &*query2.first << " | " << &*query1.first << std::endl;
 
   auto search = std::string(&*query2.first);
-  auto target = kor2Eng(&*query2.first);
 
   std::vector<MergedInfo *> search_target;
   int target_id = atoi(&*query1.first);
@@ -235,7 +203,7 @@ void route_winternal(const httplib::Request &req, httplib::Response &res,
   }
 
   std::vector<std::pair<MergedInfo *, double>> r =
-      extractor(target, search_target);
+      extractor(search, search_target);
 
   std::sort(r.begin(), r.end(), [](auto first, auto second) -> bool {
     return first.second > second.second;
@@ -375,9 +343,6 @@ inline void route_lcs(const httplib::Request &req, httplib::Response &res,
 }
 
 int main(int argc, char **argv) {
-  setlocale(LC_ALL, "");
-  std::wcout.imbue(std::locale(""));
-
   if (argc < 4) {
     std::cout << "fast-search binary\n";
     std::cout << "use " << argv[0] << " <host> <port> <private-access-token>";
